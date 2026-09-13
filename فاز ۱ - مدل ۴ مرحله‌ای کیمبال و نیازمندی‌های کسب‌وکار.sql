@@ -1,0 +1,87 @@
+
+                -- =========================================================================
+                -- Step 1: Create Two Separate Physical Databases -ساخت دیتابیس های جداگانه فیزیکی
+                -- 1. Northwind_Stg: For heavy staging and data cleansing processing.
+                -- 2. Northwind_DW: For final dimension/fact tables and reporting views.
+                -- Standard: Camel_Case & Strict Architecture Separation
+                -- =========================================================================
+
+USE [master];
+GO
+
+-- ایجاد دیتابیس مجزای لایه استیج
+IF NOT EXISTS (SELECT * FROM sys.databases WHERE name = 'Northwind_Stg')
+BEGIN
+    CREATE DATABASE [Northwind_Stg];
+    PRINT 'Database [Northwind_Stg] created successfully.';
+END
+GO
+
+-- ایجاد دیتابیس مجزای انبار داده اصلی
+IF NOT EXISTS (SELECT * FROM sys.databases WHERE name = 'Northwind_DW')
+BEGIN
+    CREATE DATABASE [Northwind_DW];
+    PRINT 'Database [Northwind_DW] created successfully.';
+END
+GO
+
+            -- =========================================================================
+            -- Step 2: Create Specific Schemas in Their Respective Databases
+            -- =========================================================================
+
+-- الف) ساخت اسکیمای Stg درون دیتابیس استیج
+USE [Northwind_Stg];
+GO
+IF NOT EXISTS (SELECT * FROM sys.schemas WHERE name = 'Stg')
+BEGIN
+    EXEC('CREATE SCHEMA [Stg] AUTHORIZATION [dbo];');
+    PRINT 'Schema [Stg] created inside [Northwind_Stg].';
+END
+GO
+
+-- ب) ساخت اسکیماهای DW و Report درون دیتابیس انبار داده
+USE [Northwind_DW];
+GO
+IF NOT EXISTS (SELECT * FROM sys.schemas WHERE name = 'DW')
+BEGIN
+    EXEC('CREATE SCHEMA [DW] AUTHORIZATION [dbo];');
+    PRINT 'Schema [DW] created inside [Northwind_DW].';
+END
+GO
+
+IF NOT EXISTS (SELECT * FROM sys.schemas WHERE name = 'Report')
+BEGIN
+    EXEC('CREATE SCHEMA [Report] AUTHORIZATION [dbo];');
+    PRINT 'Schema [Report] created inside [Northwind_DW].';
+END
+GO
+
+
+                -- =========================================================================
+                -- Function: Stg.Fn_Clean_String -فانکشن تمیزکاری 
+                -- Database: Northwind_Stg
+                -- Purpose: Sanitizes input string data during the staging extraction process.
+                -- =========================================================================
+USE [Northwind_Stg];
+GO
+
+
+CREATE OR ALTER FUNCTION Stg.Fn_Clean_String
+(
+    @Input_Text NVARCHAR(MAX)
+)
+RETURNS NVARCHAR(MAX)
+AS
+BEGIN
+    DECLARE @Cleaned_Text NVARCHAR(MAX);
+    
+    SET @Cleaned_Text = TRIM(@Input_Text);
+    
+    IF @Cleaned_Text IS NULL OR @Cleaned_Text = N'' OR @Cleaned_Text = N'null'
+    BEGIN
+        SET @Cleaned_Text = N'Unknown';
+    END
+    
+    RETURN @Cleaned_Text;
+END;
+GO
