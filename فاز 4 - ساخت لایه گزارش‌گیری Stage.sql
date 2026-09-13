@@ -1,0 +1,134 @@
+USE [Northwind_DW];
+GO
+
+-- =========================================================================
+-- View: Report.Vw_فروش_جامع
+-- Purpose: Main flattened view for Power BI Sales Dashboards with Clean Persian Aliases
+-- =========================================================================
+
+USE [Northwind_DW];
+GO
+
+CREATE OR ALTER VIEW Report.Vw_Main_Sales --فروش_جامع
+AS
+SELECT 
+    -- اطلاعات فاکتور (بعد انحطاط یافته)
+    F.Order_ID AS [شماره فاکتور],
+
+    -- بعد مشتری
+    C.Customer_ID AS [کد مشتری],
+    C.Company_Name AS [نام شرکت مشتری],
+    C.Contact_Name AS [نام مخاطب مشتری],
+    C.Country AS [کشور مشتری],
+    C.City AS [شهر مشتری],
+    C.Customer_Loyalty_Segment AS [بخش وفاداری مشتری],
+
+    -- بعد کارمند
+    E.Employee_ID AS [کد کارمند],
+    E.First_Name + N' ' + E.Last_Name AS [نام و نشان کارمند],
+    E.Title AS [عنوان شغلی کارمند],
+    E.Order_Processing_Efficiency_Tier AS [ردیف راندمان کارمند],
+
+    -- بعد محصول
+    P.Product_ID AS [کد محصول],
+    P.Product_Name AS [نام محصول],
+    P.Category_Name AS [دسته بندی محصول],
+    P.Price_Tier AS [سطح قیمتی محصول],
+    P.Stock_Status AS [وضعیت موجودی انبار],
+    P.Inventory_Turnover_Velocity AS [سرعت گردش کالا],
+
+    -- بعد تامین کننده
+    S.Company_Name AS [نام تامین کننده],
+    S.Country AS [کشور تامین کننده],
+
+    -- بعد شرکت باربری
+    SH.Company_Name AS [شرکت باربری توزیع],
+
+    -- بعد محدوده جغرافیایی فروش
+    T.Region_Description AS [منطقه کلان فروش],
+    T.Territory_Description AS [محدوده فرعی فروش],
+
+    -- بعد تاریخ شمسی (نقش‌آفرینی تاریخ فاکتور)
+    D_Order.Persian_Date_String AS [تاریخ فاکتور شمسی],
+    D_Order.Persian_Year AS [سال_فاکتور_شمسی], -- شناسه عددی سال بدون تغییر برای فیلترهای فنی
+    D_Order.Persian_Month_Name AS [ماه فاکتور شمسی],
+    D_Order.Persian_Quarter_Name AS [فصل_فاکتور_شمسی],
+    D_Order.Persian_Day_Of_Week_Name AS [روز هفته فاکتور],
+
+    -- بعد تاریخ شمسی (نقش‌آفرینی تاریخ ارسال)
+    COALESCE(D_Ship.Persian_Date_String, N'ارسال نشده') AS [تاریخ ارسال شمسی],
+
+    -- سنجه‌های عددی و مالی فاکتور
+    F.Quantity AS [تعداد فروش رفته],
+    F.Unit_Price AS [قیمت واحد فروش],
+    F.Gross_Amount AS [مبلغ ناخالص],
+    F.Discount_Amount AS [مبلغ تخفیف داده شده],
+    F.Net_Amount AS [مبلغ خالص فروش],
+    F.Allocated_Freight AS [هزینه حمل سرشکن شده],
+    
+    -- شاخص‌های هوشمند بیزینسی
+    CASE WHEN F.Is_Profitable_Discount = 1 THEN N'تخفیف هوشمند و سودآور' ELSE N'تخفیف آسیب‌رسان' END AS [وضعیت سلامت تخفیف]
+
+FROM DW.Fact_Sales F
+INNER JOIN DW.Dim_Customer C ON F.Customer_SK = C.Customer_SK
+INNER JOIN DW.Dim_Employee E ON F.Employee_SK = E.Employee_SK
+INNER JOIN DW.Dim_Product P ON F.Product_SK = P.Product_SK
+INNER JOIN DW.Dim_Supplier S ON F.Supplier_SK = S.Supplier_SK
+INNER JOIN DW.Dim_Shipper SH ON F.Shipper_SK = SH.Shipper_SK
+INNER JOIN DW.Dim_Territory T ON F.Territory_SK = T.Territory_SK
+INNER JOIN DW.Dim_Date D_Order ON F.Order_Date_SK = D_Order.Date_SK
+LEFT JOIN DW.Dim_Date D_Ship ON F.Shipped_Date_SK = D_Ship.Date_SK;
+GO
+
+USE [Northwind_DW];
+GO
+
+-- =========================================================================
+-- View: Report.Vw_تحلیل_مشتریان
+-- Purpose: Provides the latest profile of active customers for CRM analytics
+-- =========================================================================
+CREATE OR ALTER VIEW Report.Vw_Active_Customers --تحلیل_مشتریان
+AS
+SELECT 
+    Customer_ID AS [کد مشتری],
+    Company_Name AS [نام شرکت مشتری],
+    Contact_Name AS [نام مدیر رابط],
+    Contact_Title AS [سمت مدیر رابط],
+    Address AS [آدرس فعلی],
+    City AS [شهر],
+    Region AS [استان ایالت],
+    Country AS [کشور],
+    Geographic_Continent AS [قاره جغرافیایی],
+    Customer_Loyalty_Segment AS [بخش بندی وفاداری و ریزش]
+FROM DW.Dim_Customer
+WHERE Is_Current = 1;
+GO
+
+USE [Northwind_DW];
+GO
+
+-- =========================================================================
+-- View: Report.Vw_پایش_محصولات_و_انبار
+-- Purpose: Inventory velocity and product master data for supply chain dashboards
+-- =========================================================================
+CREATE OR ALTER VIEW Report.Vw_Inventory_Velocity_Product -- پایش_محصولات_و_انبار
+AS
+SELECT 
+    Product_ID AS [کد محصول],
+    Product_Name AS [نام محصول],
+    Quantity_Per_Unit AS [واحد بسته بندی],
+    Unit_Price AS [قیمت مرجع کالا],
+    Units_In_Stock AS [موجودی فعلی انبار],
+    Units_On_Order AS [تعداد سفارش داده شده به تامین کننده],
+    Reorder_Level AS [نقطه سفارش مجدد],
+    
+    CASE WHEN Discontinued = 1 THEN N'توقف تولید شده' ELSE N'فعال و در حال تولید' END AS [وضعیت تولید],
+    
+    Category_Name AS [نام دسته بندی],
+    Price_Tier AS [سطح قیمتی بازار],
+    Stock_Status AS [وضعیت بحران موجودی],
+    Inventory_Turnover_Velocity AS [سرعت گردش و فروش کالا],
+    Safety_Stock_Buffer_Ratio AS [نسبت حاشیه امنیت انبار]
+FROM DW.Dim_Product
+WHERE Is_Current = 1;
+GO
